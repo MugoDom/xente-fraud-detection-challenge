@@ -1,25 +1,25 @@
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import OrdinalEncoder
 
-# Dictionary to store encoders
-label_encoders = {}
+# Store encoder for reuse between train and test
+ordinal_encoder = None
 
 def preprocess_data(df, is_train=True):
     """
-    This function performs feature engineering and preprocessing.
+    Feature engineering and preprocessing using OrdinalEncoder.
     
     Parameters:
-        df (pd.DataFrame): The input DataFrame (train or test).
-        is_train (bool): Whether this is training data (includes target).
-        
+        df (pd.DataFrame): Input data.
+        is_train (bool): Whether this is training or test data.
+    
     Returns:
-        X (pd.DataFrame): Processed features.
-        y (pd.Series): Target (if is_train=True), else None.
+        X (pd.DataFrame): Features.
+        y (pd.Series or None): Target if is_train=True, else None.
     """
-    
-    df = df.copy()  # Create a copy of the original dataset
-    
+    global ordinal_encoder
+    df = df.copy()
+
     # --- Time features ---
     df['TransactionStartTime'] = pd.to_datetime(df['TransactionStartTime'])
     df['hour'] = df['TransactionStartTime'].dt.hour
@@ -28,8 +28,8 @@ def preprocess_data(df, is_train=True):
     # --- Log transforms ---
     df['log_amount'] = np.log1p(df['Amount'])
     df['log_value'] = np.log1p(df['Value'])
-    
-    # --- Risk flags ---
+
+    # --- Risk features ---
     high_risk_providers = ['ProviderId_1', 'ProviderId_3', 'ProviderId_5']
     high_risk_channels = ['ChannelId_1', 'ChannelId_3', 'ChannelId_2']
     risky_categories = ['transport', 'utility_bill', 'financial_services']
@@ -42,7 +42,7 @@ def preprocess_data(df, is_train=True):
     df['large_amount'] = (df['Amount'] > 10000).astype(int)
     df['amount_to_value_ratio'] = df['Amount'] / (df['Value'] + 1)
 
-    # --- Drop unneeded columns ---
+    # --- Drop unnecessary columns ---
     drop_cols = [
         'TransactionId', 'BatchId', 'AccountId', 'SubscriptionId', 'CustomerId',
         'TransactionStartTime', 'Amount', 'Value', 'CurrencyCode'
@@ -51,14 +51,11 @@ def preprocess_data(df, is_train=True):
 
     # --- Encode categoricals ---
     categorical_cols = ['ProviderId', 'ProductId', 'ProductCategory', 'ChannelId']
-    for col in categorical_cols:
-        if is_train:
-            le = LabelEncoder()
-            df[col] = le.fit_transform(df[col])
-            label_encoders[col] = le
-        else:
-            le = label_encoders[col]
-            df[col] = le.transform(df[col])
+    if is_train:
+        ordinal_encoder = OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-1)
+        df[categorical_cols] = ordinal_encoder.fit_transform(df[categorical_cols])
+    else:
+        df[categorical_cols] = ordinal_encoder.transform(df[categorical_cols])
 
     # --- Features & target ---
     features = [
