@@ -1,71 +1,99 @@
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import OrdinalEncoder
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder
+from imblearn.over_sampling import SMOTE
 
-# Store encoder for reuse between train and test
-ordinal_encoder = None
+def preprocess_data(data_path, is_training=True):
+    # Step 1: Load data
+    data = pd.read_csv(data_path)
 
-def preprocess_data(df, is_train=True):
-    """
-    Feature engineering and preprocessing using OrdinalEncoder.
-    
-    Parameters:
-        df (pd.DataFrame): Input data.
-        is_train (bool): Whether this is training or test data.
-    
-    Returns:
-        X (pd.DataFrame): Features.
-        y (pd.Series or None): Target if is_train=True, else None.
-    """
-    global ordinal_encoder
-    df = df.copy()
+    # Step 2: Initial Cleaning
+    # Drop 'Value' due to high correlation with 'Amount' (0.99)
+    data = data.drop(columns=['Value'])
 
-    # --- Time features ---
-    df['TransactionStartTime'] = pd.to_datetime(df['TransactionStartTime'])
-    df['hour'] = df['TransactionStartTime'].dt.hour
-    df['dayofweek'] = df['TransactionStartTime'].dt.dayofweek
+    # Drop irrelevant ID columns
+    drop_cols = ['TransactionId', 'BatchId', 'AccountId', 'SubscriptionId', 'CustomerId']
+    data = data.drop(columns=drop_cols)
 
-    # --- Log transforms ---
-    df['log_amount'] = np.log1p(df['Amount'])
-    df['log_value'] = np.log1p(df['Value'])
+    # Step 3: Feature Engineering
+    # Convert TransactionStartTime to datetime and extract features
+    data['TransactionStartTime'] = pd.to_datetime(data['TransactionStartTime'])
+    data['hour'] = data['TransactionStartTime'].dt.hour
+    data['day_of_week'] = data['TransactionStartTime'].dt.dayofweek
+    data['month'] = data['TransactionStartTime'].dt.month
+    data = data.drop(columns=['TransactionStartTime'])
 
-    # --- Risk features ---
-    high_risk_providers = ['ProviderId_1', 'ProviderId_3', 'ProviderId_5']
-    high_risk_channels = ['ChannelId_1', 'ChannelId_3', 'ChannelId_2']
-    risky_categories = ['transport', 'utility_bill', 'financial_services']
+    # Log-transform Amount to handle skewness (add small constant to avoid log(0))
+    data['log_amount'] = np.log1p(data['Amount'].abs() + 1)
 
-    df['high_risk_provider'] = df['ProviderId'].isin(high_risk_providers).astype(int)
-    df['high_risk_channel'] = df['ChannelId'].isin(high_risk_channels).astype(int)
-    df['risky_category'] = df['ProductCategory'].isin(risky_categories).astype(int)
+    # Flag high-amount transactions (above 90th percentile)
+    amount_threshold = data['Amount'].quantile(0.9)
+    data['high_amount_flag'] = (data['Amount'] > amount_threshold).astype(int)
 
-    # --- Amount flags ---
-    df['large_amount'] = (df['Amount'] > 10000).astype(int)
-    df['amount_to_value_ratio'] = df['Amount'] / (df['Value'] + 1)
+    # Flag high-fraud providers (ProviderId 1, 3, 5)
+    data['high_fraud_provider'] = data['ProviderId'].isin(['ProviderId_1', 'ProviderId_3', 'ProviderId_5']).astype(int)
 
-    # --- Drop unnecessary columns ---
-    drop_cols = [
-        'TransactionId', 'BatchId', 'AccountId', 'SubscriptionId', 'CustomerId',
-        'TransactionStartTime', 'Amount', 'Value', 'CurrencyCode'
-    ]
-    df.drop(columns=drop_cols, inplace=True, errors='ignore')
+    # Flag high-fraud channels (ChannelId 1, 3, 2)
+    data['high_fraud_channel'] = data['ChannelId'].isin(['ChannelId_1', 'ChannelId_3', 'ChannelId_2']).astype(int)
 
-    # --- Encode categoricals ---
-    categorical_cols = ['ProviderId', 'ProductId', 'ProductCategory', 'ChannelId']
-    if is_train:
-        ordinal_encoder = OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-1)
-        df[categorical_cols] = ordinal_encoder.fit_transform(df[categorical_cols])
+    # Flag high-fraud categories (transport, utility, financial services)
+    high_fraud_categories = ['transport', 'utility_bill', 'financial_services']
+    data['high_fraud_category'] = data['ProductCategory'].isin(high_fraud_categories).astype(int)
+
+    # Step 4: Define features and target (if training data)
+    if is_training:
+        X = data.drop('FraudResult', axis=1)
+        y = data['FraudResult']
     else:
-        df[categorical_cols] = ordinal_encoder.transform(df[categorical_cols])
+        X = data
+        y = None
 
-    # --- Features & target ---
-    features = [
-        'ProviderId', 'ProductId', 'ProductCategory', 'ChannelId',
-        'PricingStrategy', 'hour', 'dayofweek',
-        'log_amount', 'log_value', 'amount_to_value_ratio',
-        'high_risk_provider', 'high_risk_channel', 'risky_category', 'large_amount'
-    ]
+    # Step 5: Split data (if training data)
+    if is_training:
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+    else:
+        X_train, X_test, y_train, y_test = None, X, None, None
 
-    X = df[features]
-    y = df['FraudResult'] if is_train else None
+    # Step 6: Preprocessing Pipeline
+    # Define numerical and categorical columns
+    numerical_cols = ['Amount', 'log_amount', 'hour', 'day_of_week', 'month']
+    categorical_cols = ['CurrencyCode', 'CountryCode', 'ProviderId', 'ProductId', 'ProductCategory', 'ChannelId', 'PricingStrategy']
+    binary_cols = ['high_amount_flag', 'high_fraud_provider', 'high_fraud_channel', 'high_fraud_category']
 
-    return X, y
+    # Create preprocessing pipeline
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ('num', StandardScaler(), numerical_cols),
+            ('cat', OneHotEncoder(drop='first', sparse_output=False, handle_unknown='ignore'), categorical_cols),
+            ('bin', 'passthrough', binary_cols)
+        ])
+
+    # Fit and transform data
+    if is_training:
+        X_train_processed = preprocessor.fit_transform(X_train)
+        X_test_processed = preprocessor.transform(X_test)
+        # Step 7: Handle Class Imbalance with SMOTE (only for training data)
+        smote = SMOTE(random_state=42)
+        X_train_balanced, y_train_balanced = smote.fit_resample(X_train_processed, y_train)
+    else:
+        # For test data, only transform (preprocessor must be fitted already)
+        X_train_processed, y_train_balanced = None, None
+        X_test_processed = preprocessor.transform(X_test)
+
+    # Step 8: Get feature names for the processed data
+    feature_names = (
+        numerical_cols +
+        list(preprocessor.named_transformers_['cat'].get_feature_names_out(categorical_cols)) +
+        binary_cols
+    )
+
+    return (X_train_balanced if is_training else None, 
+            y_train_balanced if is_training else None, 
+            X_test_processed, 
+            y_test if is_training else None, 
+            feature_names, 
+            preprocessor)
