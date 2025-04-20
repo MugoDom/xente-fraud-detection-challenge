@@ -46,8 +46,12 @@ def preprocess_data(data_path, is_training=True):
 
     # Step 4: Define features and target (if training data)
     if is_training:
+        # Drop rows with NaN target values before splitting
+        data = data.dropna(subset=['FraudResult'])
+        data['FraudResult'] = pd.to_numeric(data['FraudResult'], errors='coerce')
         X = data.drop('FraudResult', axis=1)
         y = data['FraudResult']
+
     else:
         X = data
         y = None
