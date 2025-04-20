@@ -3,10 +3,12 @@
 ## Overview
 This project is a solution to the Xente Fraud Detection Challenge, where the goal is to build a machine learning model to predict fraudulent transactions in the Xente dataset. The project implements a complete machine learning pipeline, including data preprocessing, feature engineering, model training, and evaluation. The final model is a Random Forest classifier, and the pipeline handles class imbalance using SMOTE and preprocesses data using a combination of numerical scaling, categorical encoding, and custom feature engineering.
 
-The pipeline is modular and split into three main notebooks:
-1. **Preprocessing**: Cleans the data, engineers features, and preprocesses the training, validation, and test datasets.
-2. **Training**: Trains a Random Forest model on the preprocessed training data.
-3. **Evaluation**: Evaluates the model on the validation set and generates predictions for the test set.
+The pipeline is modular and split into five main notebooks:
+1. **data_exploration**: Explores the data to get an understanding of the dataset.
+2. **data_preprocessing**: Cleans the data, engineers features, and preprocesses the training, validation, and test datasets.
+3. **model_training**: Trains a Random Forest model on the preprocessed training data.
+4. **model_evaluation**: Evaluates the model on the validation set and generates predictions for the test set.
+5. **hyperparameter_tuining**: Tunes the model using Gridsearch CV.
 
 ## Project Structure
 ```
@@ -14,26 +16,38 @@ xente-fraud-detection-challenge/
 ├── data/
 │   ├── training.csv        # Raw training data with FraudResult labels
 │   └── test.csv            # Raw test data for predictions
-├── src/
-│   ├── preprocess_data_notebook.py    # Preprocessing script
-│   ├── train_model_notebook.py        # Training script
-│   ├── evaluate_model_notebook.py     # Evaluation and prediction script
-│   ├── preprocessing_pipeline.py      # Preprocessing pipeline functions
-│   ├── model_training.py              # Model training functions
-│   ├── model_evaluation.py            # Model evaluation functions
-│   ├── cleaned_training.csv           # Cleaned training data (output)
-│   ├── preprocessed_train.csv         # Preprocessed training data (output)
-│   ├── preprocessed_val.csv           # Preprocessed validation data (output)
-│   ├── preprocessed_test.csv          # Preprocessed test data (output)
-│   ├── random_forest_model.joblib     # Trained model (output)
-│   ├── amount_threshold.joblib        # Amount threshold for feature engineering (output)
-│   ├── preprocessor.joblib            # Fitted preprocessor (output)
-│   ├── feature_names.joblib           # Feature names after preprocessing (output)
-│   ├── validation_predictions.csv     # Validation predictions (output)
-│   ├── test_predictions.csv           # Test predictions (output)
+├── models/
+│   ├── amount_threshold.joblib    # Amount threshold for feature engineering
+│   ├── feature_names.joblib       # Feature names after preprocessing
+│   ├── preprocessor.joblib        # Fitted preprocessor
+│   ├── random_forest_model.joblib # Trained Random Forest model
+│   ├── rf.joblib                  # Alternative Random Forest model (possibly untuned)
+│   └── rf_model_tuned.joblib      # Tuned Random Forest model
+├── notebooks/
+│   ├── .ipynb_checkpoints/        # Jupyter notebook checkpoints
+│   ├── 01_data_exploration.ipynb  # Notebook for data exploration
+│   ├── 02_data_preprocessing.ipynb # Notebook for data preprocessing
+│   ├── 03_model_training.ipynb    # Notebook for model training
+│   ├── 04_evaluation_and_tuning.ipynb # Notebook for evaluation and tuning
+│   ├── 05_hyperparameter_tuning.ipynb # Notebook for hyperparameter tuning
 │   ├── confusion_matrix_validation.png # Confusion matrix plot (output)
-│   └── feature_importance_validation.png # Feature importance plot (output)
-└── README.md                     # Project documentation
+│   ├── feature_importance_validation.png # Feature importance plot (output)
+│   ├── validation_predictions.csv    # Validation predictions (output)
+│   └── test_predictions.csv          # Test predictions (output)
+├── plots/
+│   # (Empty directory for storing plots)
+├── src/
+│   ├── __pycache__/               # Python cache files
+│   ├── data_preprocessing.py      # Preprocessing pipeline functions
+│   ├── model_evaluation.py        # Model evaluation functions
+│   ├── model_training.py          # Model training functions
+│   └── model_tuning.py            # Model tuning functions
+├── tests/
+│   # (Empty directory for tests, currently unused)
+├── venv/
+│   # (Virtual environment directory)
+├── .gitignore                     # Git ignore file
+└── README.md                      # Project documentation
 ```
 
 ## Prerequisites
@@ -53,7 +67,7 @@ pip install pandas numpy scikit-learn imbalanced-learn matplotlib joblib
 ```
 
 ## Setup Instructions
-1. **Clone the Repository** (if applicable):
+1. **Clone the Repository**:
    ```bash
    git clone <repository-url>
    cd xente-fraud-detection-challenge
@@ -72,11 +86,11 @@ pip install pandas numpy scikit-learn imbalanced-learn matplotlib joblib
 The pipeline is split into three stages: preprocessing, training, and evaluation. Run the scripts in the following order from the `src/` directory.
 
 ### 1. Preprocessing
-The `preprocess_data_notebook.py` script cleans the raw data, performs feature engineering, and preprocesses the training, validation, and test datasets. It also saves the preprocessed data and preprocessing objects.
+The `data_processing.py` script cleans the raw data, performs feature engineering, and preprocesses the training, validation, and test datasets. It also saves the preprocessed data and preprocessing objects.
 
 ```bash
 cd src
-python preprocess_data_notebook.py
+python data_processing.py
 ```
 
 **Outputs**:
@@ -89,20 +103,20 @@ python preprocess_data_notebook.py
 - `feature_names.joblib`: Feature names after preprocessing.
 
 ### 2. Training
-The `train_model_notebook.py` script loads the preprocessed training data and trains a Random Forest model.
+The `model_training.py` script loads the preprocessed training data and trains a Random Forest model.
 
 ```bash
-python train_model_notebook.py
+python model_training.py
 ```
 
 **Outputs**:
 - `random_forest_model.joblib`: Trained Random Forest model.
 
 ### 3. Evaluation and Prediction
-The `evaluate_model_notebook.py` script evaluates the model on the validation set and generates predictions for the test set.
+The `model_evaluation.py` script evaluates the model on the validation set and generates predictions for the test set.
 
 ```bash
-python evaluate_model_notebook.py
+python model_evaluation.py
 ```
 
 **Outputs**:
@@ -131,7 +145,7 @@ The preprocessing pipeline includes the following feature engineering steps:
 
 ## Model
 - **Algorithm**: Random Forest Classifier.
-- **Hyperparameters**: Default parameters are used (can be tuned in `model_training.py`).
+- **Hyperparameters**: Default parameters are used (can be tuned in `model_tuning.py`).
 - **Training Data**: Preprocessed training data with SMOTE applied to balance the classes.
 
 ## Evaluation Metrics
@@ -145,7 +159,6 @@ The model is evaluated on the validation set using:
 - **Data Quality**: Ensure there are no `NaN` values in the `FraudResult` column of `training.csv`. The pipeline includes checks and imputation to handle missing values in other columns.
 - **Scalability**: The pipeline is designed for the Xente dataset but can be adapted for other fraud detection tasks by modifying the feature engineering and preprocessing steps.
 - **Future Improvements**:
-  - Hyperparameter tuning for the Random Forest model.
   - Experimentation with other algorithms (e.g., XGBoost, LightGBM).
   - Additional feature engineering based on domain knowledge.
 
@@ -153,5 +166,5 @@ The model is evaluated on the validation set using:
 This project is licensed under the MIT License.
 
 ## Acknowledgments
-- The Xente Fraud Detection Challenge dataset.
+- The Xente Fraud Detection Challenge dataset[https://zindi.africa/competitions/xente-fraud-detection-challenge].
 - The `scikit-learn` and `imbalanced-learn` libraries for machine learning tools.
